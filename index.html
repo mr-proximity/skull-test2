@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anatomical Layers Explorer</title>
+    <style>
+        body {
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            transition: filter 0.3s ease;
+        }
+
+        .body-blur {
+            filter: blur(5px);
+        }
+
+        .container {
+            position: relative;
+            width: fit-content;
+            height: fit-content;
+        }
+
+        .anatomy-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            max-width: 100%;
+            height: auto;
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+
+        .anatomy-layer.glowing {
+            filter: drop-shadow(0 0 15px #00a2ff) 
+                   drop-shadow(0 0 30px #0066ff)
+                   drop-shadow(0 0 45px #0033ff);
+            transform: scale(1.03);
+        }
+
+        .hit-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+            opacity: 0;
+        }
+
+        .popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 20, 40, 0.9);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #00a2ff;
+            max-width: 500px;
+            width: 80%;
+            z-index: 100;
+            display: none;
+            box-shadow: 0 0 20px rgba(0, 100, 255, 0.5);
+        }
+
+        .popup h2 {
+            color: #00a2ff;
+            margin-top: 0;
+            border-bottom: 1px solid #0066ff;
+            padding-bottom: 10px;
+        }
+
+        .popup-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #0066ff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .loading {
+            color: white;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Base layer (doesn't glow) -->
+        <img class="anatomy-layer" id="base-layer" src="test.png" alt="Base Anatomy">
+
+        <!-- Interactive layers -->
+        <img class="anatomy-layer" id="skull-layer" src="skull.png" alt="Skull">
+        <img class="anatomy-layer" id="spine-layer" src="spine.png" alt="Spine">
+        <img class="anatomy-layer" id="ribcage-layer" src="ribcage.png" alt="Ribcage">
+        <img class="anatomy-layer" id="pelvis-layer" src="pelvis.png" alt="Pelvis">
+        <img class="anatomy-layer" id="right-arm-layer" src="right-arm.png" alt="Right Arm">
+        <img class="anatomy-layer" id="left-arm-layer" src="left-arm.png" alt="Left Arm">
+        <img class="anatomy-layer" id="hands-layer" src="hands.png" alt="Hands">
+        <img class="anatomy-layer" id="thighs-layer" src="thighs.png" alt="Thighs">
+        <img class="anatomy-layer" id="lower-leg-layer" src="lower-leg.png" alt="Lower Leg">
+        <img class="anatomy-layer" id="feet-layer" src="feet.png" alt="Feet">
+
+        <!-- Canvas for each interactive layer -->
+        <canvas class="hit-canvas" id="skull-canvas"></canvas>
+        <canvas class="hit-canvas" id="spine-canvas"></canvas>
+        <canvas class="hit-canvas" id="ribcage-canvas"></canvas>
+        <canvas class="hit-canvas" id="pelvis-canvas"></canvas>
+        <canvas class="hit-canvas" id="right-arm-canvas"></canvas>
+        <canvas class="hit-canvas" id="left-arm-canvas"></canvas>
+        <canvas class="hit-canvas" id="hands-canvas"></canvas>
+        <canvas class="hit-canvas" id="thighs-canvas"></canvas>
+        <canvas class="hit-canvas" id="lower-leg-canvas"></canvas>
+        <canvas class="hit-canvas" id="feet-canvas"></canvas>
+    </div>
+
+    <!-- Popups for each part -->
+    <div class="popup" id="skull-popup">
+        <button class="popup-close" onclick="closePopup('skull-popup')">×</button>
+        <h2>Skull</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>The skull consists of 22 bones</li>
+            <li>Protects the brain and supports facial structures</li>
+            <li>The mandible is the only movable bone in the skull</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="spine-popup">
+        <button class="popup-close" onclick="closePopup('spine-popup')">×</button>
+        <h2>Spine</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>Consists of 33 vertebrae</li>
+            <li>Provides structural support and protects the spinal cord</li>
+            <li>Has natural curves for shock absorption</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="ribcage-popup">
+        <button class="popup-close" onclick="closePopup('ribcage-popup')">×</button>
+        <h2>Ribcage</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>Composed of 24 ribs (12 pairs)</li>
+            <li>Protects vital organs like heart and lungs</li>
+            <li>The sternum connects most ribs in the front</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="pelvis-popup">
+        <button class="popup-close" onclick="closePopup('pelvis-popup')">×</button>
+        <h2>Pelvis</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>Connects the spine to the lower limbs</li>
+            <li>Supports abdominal organs</li>
+            <li>Wider in females to accommodate childbirth</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="right-arm-popup">
+        <button class="popup-close" onclick="closePopup('right-arm-popup')">×</button>
+        <h2>Right Arm</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>Contains humerus, radius, and ulna bones</li>
+            <li>Allows for complex rotational movements</li>
+            <li>Contains over 30 muscles for precise control</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="left-arm-popup">
+        <button class="popup-close" onclick="closePopup('left-arm-popup')">×</button>
+        <h2>Left Arm</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>Mirrors the right arm structure</li>
+            <li>Typically less dominant in right-handed people</li>
+            <li>Contains the same complex bone and muscle structure</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="hands-popup">
+        <button class="popup-close" onclick="closePopup('hands-popup')">×</button>
+        <h2>Hands</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>Each hand has 27 bones</li>
+            <li>Contains some of the body's most sensitive touch receptors</li>
+            <li>The thumb opposability is unique to humans and primates</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="thighs-popup">
+        <button class="popup-close" onclick="closePopup('thighs-popup')">×</button>
+        <h2>Thighs</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>Contain the femur - the longest bone in the body</li>
+            <li>Support the body's weight during standing and movement</li>
+            <li>House powerful quadriceps and hamstring muscles</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="lower-leg-popup">
+        <button class="popup-close" onclick="closePopup('lower-leg-popup')">×</button>
+        <h2>Lower Leg (Tibia and Fibula)</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>The tibia is the second largest bone after the femur</li>
+            <li>The fibula supports muscles but bears little weight</li>
+            <li>A tibia fracture is one of the most common sports injuries</li>
+        </ul>
+    </div>
+
+    <div class="popup" id="feet-popup">
+        <button class="popup-close" onclick="closePopup('feet-popup')">×</button>
+        <h2>Feet</h2>
+        <p><strong>Facts:</strong></p>
+        <ul>
+            <li>Each foot contains 26 bones</li>
+            <li>The foot has three arches for weight distribution</li>
+            <li>Contains about 25% of all the body's bones</li>
+        </ul>
+    </div>
+
+    <div class="loading" id="loading">Loading anatomy model...</div>
+
+    <script>
+        // Configuration for all interactive layers
+        const layers = [
+            { id: 'skull', name: 'Skull' },
+            { id: 'spine', name: 'Spine' },
+            { id: 'ribcage', name: 'Ribcage' },
+            { id: 'pelvis', name: 'Pelvis' },
+            { id: 'right-arm', name: 'Right Arm' },
+            { id: 'left-arm', name: 'Left Arm' },
+            { id: 'hands', name: 'Hands' },
+            { id: 'thighs', name: 'Thighs' },
+            { id: 'lower-leg', name: 'Lower Leg' },
+            { id: 'feet', name: 'Feet' }
+        ];
+
+        let loadedImages = 0;
+        const totalImages = layers.length + 1; // +1 for base layer
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const loading = document.getElementById('loading');
+            const baseLayer = document.getElementById('base-layer');
+
+            // Set crossOrigin for all images to handle transparency detection
+            baseLayer.crossOrigin = "Anonymous";
+            layers.forEach(layer => {
+                const img = document.getElementById(`${layer.id}-layer`);
+                if (img) img.crossOrigin = "Anonymous";
+            });
+
+            // Track when all images are loaded
+            baseLayer.onload = imageLoaded;
+            layers.forEach(layer => {
+                const img = document.getElementById(`${layer.id}-layer`);
+                if (img) img.onload = imageLoaded;
+                if (img) img.onerror = imageError;
+            });
+
+            function imageLoaded() {
+                loadedImages++;
+                loading.textContent = `Loading anatomy model (${loadedImages}/${totalImages})...`;
+                
+                if (loadedImages === totalImages) {
+                    loading.style.display = 'none';
+                    initAllCanvases();
+                }
+            }
+
+            function imageError(e) {
+                console.error("Error loading image:", e.target.src);
+                loadedImages++; // Count it anyway to prevent infinite loading
+                if (loadedImages === totalImages) {
+                    loading.style.display = 'none';
+                    initAllCanvases();
+                }
+            }
+        });
+
+        function initAllCanvases() {
+            layers.forEach(layer => {
+                const img = document.getElementById(`${layer.id}-layer`);
+                const canvas = document.getElementById(`${layer.id}-canvas`);
+                
+                if (!img || !canvas) return;
+
+                // Set canvas dimensions to match displayed image size
+                const displayWidth = img.clientWidth;
+                const displayHeight = img.clientHeight;
+                canvas.width = displayWidth;
+                canvas.height = displayHeight;
+
+                // Draw image to canvas
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+
+                // Get image data for transparency checks
+                const imageData = ctx.getImageData(0, 0, displayWidth, displayHeight);
+                const pixels = imageData.data;
+
+                // Mouse move handler for this layer
+                canvas.addEventListener('mousemove', function(e) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = Math.floor(e.clientX - rect.left);
+                    const y = Math.floor(e.clientY - rect.top);
+
+                    // Calculate pixel index
+                    const pixelIndex = (y * displayWidth + x) * 4;
+                    const alpha = pixels[pixelIndex + 3];
+
+                    // Remove glow from all layers first
+                    layers.forEach(l => {
+                        const layerImg = document.getElementById(`${l.id}-layer`);
+                        if (layerImg) layerImg.classList.remove('glowing');
+                    });
+
+                    // Apply glow to this layer if not transparent
+                    if (alpha > 10) {
+                        img.classList.add('glowing');
+                    }
+                });
+
+                // Click handler to show popup
+                canvas.addEventListener('click', function(e) {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = Math.floor(e.clientX - rect.left);
+                    const y = Math.floor(e.clientY - rect.top);
+
+                    const pixelIndex = (y * displayWidth + x) * 4;
+                    const alpha = pixels[pixelIndex + 3];
+
+                    if (alpha > 10) {
+                        showPopup(`${layer.id}-popup`);
+                    }
+                });
+
+                // Remove glow when mouse leaves
+                canvas.addEventListener('mouseleave', function() {
+                    img.classList.remove('glowing');
+                });
+            });
+        }
+
+        function showPopup(popupId) {
+            document.body.classList.add('body-blur');
+            const popup = document.getElementById(popupId);
+            if (popup) {
+                popup.style.display = 'block';
+            }
+        }
+
+        function closePopup(popupId) {
+            document.body.classList.remove('body-blur');
+            const popup = document.getElementById(popupId);
+            if (popup) {
+                popup.style.display = 'none';
+            }
+        }
+
+        // Close popup when clicking outside
+        window.addEventListener('click', function(e) {
+            if (e.target.classList.contains('popup')) {
+                closePopup(e.target.id);
+            }
+        });
+    </script>
+</body>
+</html>
