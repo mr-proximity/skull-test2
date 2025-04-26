@@ -8,145 +8,294 @@
         body {
             background-color: #000;
             margin: 0;
-            overflow: hidden;
-            font-family: Arial;
+            /* Allow scrolling if image is too big */
+            /* overflow: hidden; */ 
+            font-family: Arial, sans-serif; /* Added sans-serif fallback */
+            display: flex; /* Center container */
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh; /* Ensure centering works */
         }
         .container {
             position: relative;
-            width: 100vw;
-            height: 100vh;
+            /* width/height will be set by JS based on base image */
+            margin: auto; /* Helps with centering */
+            cursor: default; /* Default cursor */
         }
         .anatomy-layer {
             position: absolute;
             top: 0;
             left: 0;
-            width: 100%;
-            pointer-events: none;
+            width: 100%; /* Layer image scales with container */
+            height: 100%;
+            pointer-events: none; /* Image itself doesn't capture events */
+            user-select: none; /* Prevent image selection */
+            -webkit-user-drag: none; /* Prevent image dragging */
         }
+        /* Canvas used for hit detection */
+        .hit-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%; /* Canvas display scales with container */
+            height: 100%;
+            pointer-events: auto; /* Canvas MUST capture events */
+            cursor: pointer; /* Indicate interactivity */
+             /* Make canvas invisible for debugging, remove or set to 0 */
+            opacity: 0; 
+           /* outline: 1px solid red; */ /* DEBUG: Show canvas boundary */
+        }
+
         .glowing {
             filter: drop-shadow(0 0 15px #00a2ff);
-            animation: pulse 1.5s infinite alternate;
+            /* Removed animation for simpler hover glow, add back if desired */
+            /* animation: pulse 1.5s infinite alternate; */
+            transition: filter 0.1s ease-in-out; /* Smooth glow transition */
         }
-        @keyframes pulse {
+
+        /* Optional: Add pulsing back if needed */
+        /* @keyframes pulse {
             0% { filter: drop-shadow(0 0 10px #00a2ff); }
             100% { filter: drop-shadow(0 0 20px #00a2ff); }
-        }
+        } */
+
         #loading {
             color: white;
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            font-size: 1.5em;
+            z-index: 1000; /* Ensure loading is on top */
+        }
+
+        /* Basic popup style */
+        .popup {
+            position: fixed;
+            background-color: rgba(40, 40, 40, 0.9);
+            color: white;
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 10px 15px;
+            font-size: 0.9em;
+            z-index: 1100; /* Above everything else */
+            pointer-events: none; /* Don't let popup interfere */
+            display: none; /* Hidden by default */
+            white-space: nowrap;
         }
     </style>
 </head>
 <body>
     <div class="container" id="container">
-        <!-- All layers will be added here by JavaScript -->
-    </div>
+        </div>
     <div id="loading">Loading anatomy model...</div>
-
-    <script>
-        // Configuration for all layers
+    <div class="popup" id="info-popup"></div> <script>
+        // Configuration for all layers (ensure paths are correct)
         const layers = [
-            { id: 'base', src: 'test.png', interactive: false },
-            { id: 'skull', src: 'skull.png', interactive: true },
-            { id: 'spine', src: 'spine.png', interactive: true },
-            { id: 'ribcage', src: 'ribcage.png', interactive: true },
-            { id: 'pelvis', src: 'pelvis.png', interactive: true },
-            { id: 'right-arm', src: 'right-arm.png', interactive: true },
-            { id: 'left-arm', src: 'left-arm.png', interactive: true },
-            { id: 'hands', src: 'hands.png', interactive: true },
-            { id: 'thighs', src: 'thighs.png', interactive: true },
-            { id: 'lower-leg', src: 'lower-leg.png', interactive: true },
-            { id: 'feet', src: 'feet.png', interactive: true }
+             { id: 'base', src: 'test.png', name: 'Base Body', interactive: false }, // Added name for clarity
+             { id: 'skull', src: 'skull.png', name: 'Skull', interactive: true },
+             { id: 'spine', src: 'spine.png', name: 'Spine', interactive: true },
+             { id: 'ribcage', src: 'ribcage.png', name: 'Ribcage', interactive: true },
+             { id: 'pelvis', src: 'pelvis.png', name: 'Pelvis', interactive: true },
+             { id: 'right-arm', src: 'right-arm.png', name: 'Right Arm Bones', interactive: true },
+             { id: 'left-arm', src: 'left-arm.png', name: 'Left Arm Bones', interactive: true },
+             { id: 'hands', src: 'hands.png', name: 'Hand Bones', interactive: true },
+             { id: 'thighs', src: 'thighs.png', name: 'Thigh Bones (Femur)', interactive: true },
+             { id: 'lower-leg', src: 'lower-leg.png', name: 'Lower Leg Bones', interactive: true },
+             { id: 'feet', src: 'feet.png', name: 'Foot Bones', interactive: true }
         ];
 
-        // Create all layers
         const container = document.getElementById('container');
         const loading = document.getElementById('loading');
-        
-        layers.forEach(layer => {
-            const img = document.createElement('img');
+        const popup = document.getElementById('info-popup');
+        let activeLayer = null; // Track currently hovered layer
+
+        // Preload images and create elements
+        const imageElements = {};
+        const canvasElements = {};
+        const canvasContexts = {};
+        let imagesToLoad = layers.length;
+
+        layers.forEach((layer, index) => {
+            const img = new Image(); // Use Image constructor for preloading
             img.className = 'anatomy-layer';
             img.id = `${layer.id}-layer`;
+            img.alt = layer.name; // Use descriptive name
+            img.style.zIndex = index; // Base layer at 0, others on top
             img.src = layer.src;
-            img.alt = layer.id;
-            img.style.zIndex = layers.indexOf(layer);
-            container.appendChild(img);
-            
+            imageElements[layer.id] = img;
+
+            img.onload = () => {
+                imagesToLoad--;
+                console.log(`Loaded: ${layer.id} (${imagesToLoad} left)`);
+                if (imagesToLoad === 0) {
+                    console.log("All images loaded.");
+                    setupScene(); // Setup scene only after all images are loaded
+                }
+            };
+            img.onerror = () => {
+                imagesToLoad--; // Still decrement if error occurs
+                showError(`Failed to load ${layer.name} image (${layer.src})`);
+                // Optionally remove the broken layer or handle differently
+                if (imagesToLoad === 0) {
+                     console.log("Finished loading images (with errors).");
+                     setupScene(); 
+                 }
+            };
+
+            container.appendChild(img); // Add img to container immediately
+
             if (layer.interactive) {
                 const canvas = document.createElement('canvas');
                 canvas.className = 'hit-canvas';
                 canvas.id = `${layer.id}-canvas`;
-                canvas.style.zIndex = layers.indexOf(layer) + 100;
+                // Set high z-index for canvases to ensure they are on top for events
+                canvas.style.zIndex = index + 100; 
+                canvasElements[layer.id] = canvas;
                 container.appendChild(canvas);
             }
         });
 
-        // Wait for base image to load first
-        const baseImg = document.getElementById('base-layer');
-        baseImg.onload = initInteractiveLayers;
-        baseImg.onerror = () => showError("Failed to load base image");
-
-        function initInteractiveLayers() {
+        function setupScene() {
             loading.textContent = "Initializing interactive layers...";
+            const baseImg = imageElements['base'];
+
+            if (!baseImg || !baseImg.naturalWidth) {
+                 showError("Base image failed to load or has no dimensions. Cannot initialize.");
+                 loading.style.display = 'block'; // Keep loading message visible
+                 return;
+             }
             
-            // Set container size to match base image
-            container.style.width = baseImg.width + 'px';
-            container.style.height = baseImg.height + 'px';
-            
-            // Initialize interactive layers
-            let loadedCount = 0;
+            // Set container size based on the base image's natural dimensions
+            container.style.width = baseImg.naturalWidth + 'px';
+            container.style.height = baseImg.naturalHeight + 'px';
+
+            // Initialize interactive layers (canvases and event listeners)
             layers.filter(l => l.interactive).forEach(layer => {
-                const img = document.getElementById(`${layer.id}-layer`);
-                const canvas = document.getElementById(`${layer.id}-canvas`);
+                const img = imageElements[layer.id];
+                const canvas = canvasElements[layer.id];
                 
-                img.onload = function() {
-                    // Set canvas to image size
-                    canvas.width = img.naturalWidth;
-                    canvas.height = img.naturalHeight;
-                    canvas.style.width = img.width + 'px';
-                    canvas.style.height = img.height + 'px';
-                    
-                    // Draw image on canvas
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // Make canvas interactive
-                    canvas.onmousemove = function(e) {
-                        const rect = canvas.getBoundingClientRect();
-                        const x = e.clientX - rect.left;
-                        const y = e.clientY - rect.top;
-                        
-                        // Check pixel transparency
-                        const pixel = ctx.getImageData(x, y, 1, 1).data;
-                        if (pixel[3] > 10) { // If not transparent
-                            img.classList.add('glowing');
-                        } else {
-                            img.classList.remove('glowing');
-                        }
-                    };
-                    
-                    canvas.onmouseleave = function() {
-                        img.classList.remove('glowing');
-                    };
-                    
-                    loadedCount++;
-                    if (loadedCount === layers.filter(l => l.interactive).length) {
-                        loading.style.display = 'none';
-                    }
-                };
+                if (!img || !canvas || !img.complete || img.naturalWidth === 0) {
+                    console.warn(`Skipping initialization for ${layer.id} due to loading issues.`);
+                    return; // Skip if image or canvas didn't load properly
+                }
+
+                // Set canvas resolution to match the image's natural resolution
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+
+                // Get 2D context and draw the image onto the canvas
+                // Use { willReadFrequently: true } for potential performance boost
+                const ctx = canvas.getContext('2d', { willReadFrequently: true }); 
+                if (!ctx) {
+                     console.error(`Could not get 2D context for ${layer.id}`);
+                     return;
+                 }
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                canvasContexts[layer.id] = ctx; // Store context for later use
+
+                // --- Event Listeners ---
                 
-                img.onerror = () => showError(`Failed to load ${layer.id} image`);
+                canvas.addEventListener('mousemove', (e) => handleMouseMove(e, layer, img, canvas, ctx));
+                canvas.addEventListener('mouseleave', () => handleMouseLeave(img));
+                canvas.addEventListener('click', (e) => handleClick(e, layer, canvas, ctx));
             });
+            
+            // Hide loading message after a short delay to ensure rendering
+            setTimeout(() => {
+                loading.style.display = 'none';
+                console.log("Initialization complete.");
+            }, 100); // Adjust delay if needed
+        }
+
+        function isPixelTransparent(event, canvas, ctx) {
+            const rect = canvas.getBoundingClientRect();
+            // Calculate mouse position relative to the canvas element
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+
+            // Scale mouse coordinates to match canvas internal resolution
+            const scaleX = canvas.width / canvas.clientWidth;
+            const scaleY = canvas.height / canvas.clientHeight;
+            const canvasX = Math.floor(mouseX * scaleX);
+            const canvasY = Math.floor(mouseY * scaleY);
+
+             // Ensure coordinates are within canvas bounds
+             if (canvasX < 0 || canvasX >= canvas.width || canvasY < 0 || canvasY >= canvas.height) {
+                 return true; // Treat out-of-bounds as transparent
+             }
+
+            try {
+                 // Get the alpha value of the pixel [r, g, b, a]
+                 const pixelData = ctx.getImageData(canvasX, canvasY, 1, 1).data;
+                 const alpha = pixelData[3];
+                 // Consider pixels with low alpha as transparent (adjust threshold if needed)
+                 return alpha < 20; 
+            } catch (e) {
+                 // Security errors can happen if image is cross-origin without CORS
+                 console.error("Error reading pixel data:", e);
+                 // Assume non-transparent to be safe, or handle as needed
+                 return false; 
+             }
+        }
+        
+        function handleMouseMove(e, layer, img, canvas, ctx) {
+            if (!isPixelTransparent(e, canvas, ctx)) {
+                if (activeLayer !== img) {
+                     // Remove glow from previously active layer (if any)
+                     if (activeLayer) {
+                         activeLayer.classList.remove('glowing');
+                     }
+                     // Add glow to current layer and track it
+                     img.classList.add('glowing');
+                     activeLayer = img;
+                     
+                     // Show popup
+                     popup.textContent = layer.name;
+                     popup.style.display = 'block';
+                 }
+                 // Update popup position
+                 // Position slightly offset from cursor
+                 popup.style.left = `${e.clientX + 15}px`; 
+                 popup.style.top = `${e.clientY + 15}px`;
+             } else {
+                 // If hovering over transparent part, treat as mouse leave for this layer
+                 handleMouseLeave(img);
+                 popup.style.display = 'none'; 
+             }
+        }
+
+        function handleMouseLeave(img) {
+            if (activeLayer === img) {
+                 img.classList.remove('glowing');
+                 activeLayer = null;
+                 popup.style.display = 'none'; // Hide popup on leave
+             }
+        }
+
+        function handleClick(e, layer, canvas, ctx) {
+            if (!isPixelTransparent(e, canvas, ctx)) {
+                 // Simple alert for popup action
+                 alert(`You clicked on: ${layer.name}`); 
+                 // Replace alert with your desired popup logic (e.g., showing a modal)
+             }
         }
 
         function showError(message) {
             loading.style.color = 'red';
             loading.textContent = message;
+            loading.style.display = 'block'; // Ensure error message is visible
             console.error(message);
         }
+
+        // Optional: Add resize handling if the window might resize
+        // window.addEventListener('resize', () => {
+        //    console.log("Window resized, re-calculating sizes might be needed.");
+             // You might need to re-run parts of setupScene or adjust canvas sizes/styles
+             // if your layout is responsive. For fixed-size container based on image,
+             // this might not be strictly necessary unless you resize the container itself.
+        // });
+
     </script>
 </body>
 </html>
